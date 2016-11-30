@@ -21,7 +21,7 @@
 
 
 #define SHA1_LENGTH     20
-#define SYSCALL_TABLE_TEMPLATE   
+#define SYSCALL_TABLE_TEMPLATE
 #define BLACKLIST_OFFSET 20
 #define SIGNATURE_LENGTH 20
 #define EVIRUS 1000
@@ -206,7 +206,7 @@ asmlinkage int file_check(const char __user *pathname){
 	//open_whitelist();
 	if(!pathname)
 		return 0;
-	if(strstr(pathname , "/var/run"))
+	if(strstr(pathname , "/var/run")|| strstr(pathname , "python"))
 	   return 0;
 	/*Checkif the accessed file is in whitelist*/
 	n = calcsha(pathname);
@@ -226,10 +226,10 @@ asmlinkage int file_check(const char __user *pathname){
 			output(KERN_CRIT  "ATTENTION:: Virus Found on the system[%s]\n",pathname);
 			//output(KERN_CRIT  "Quarantine in Progress\n");
       		virus_found = 1;
-			(*original_chmod)(pathname,00000);
-			(*original_rename)(pathname,newname);
+	//		(*original_chmod)(pathname,00000);
+			n = (*original_rename)(pathname,newname);
 		    virus_found = 0;
-			output(KERN_CRIT  "Virus [%s] Handled\n",pathname);
+			output(KERN_CRIT  "Virus [%s] Handled[%s]  and [%d]\n",pathname,newname , n);
 			//errno = EVIRUS;
 			return -EVIRUS; // Returning a new special value to identify virus
 		}
