@@ -1,19 +1,346 @@
-ÿÿ<89>Eì9]ätj"èûìÿÿ<89>E^HjÍèñìÿÿ<8b>ØSWVhÈ°@^@h<98><85>@^@è<85>
-<^@^@<83>Ä^TSÿu^Hÿuìÿuðÿ^U@<81>@^@étòÿÿ¡<8c><85>@^@<89>E¸¡<90><85>
-@^@j^A<89>E¼è®ìÿÿj^R<8b>øè¥ìÿÿjÝ<8b>Øè<9c>ìÿÿPh^C ^@^@V<8d>E¸PSWÿ^UD<81>
-@^@<8d>E¸PVÿ^U^\<81>@^@é^AòÿÿQè8;^@^@Y<89>E^H9]äuDj^BèZíÿÿ<8b>ø;û^O<84>
-^Pòÿÿj3èRìÿÿ<8b>ðVWÿ^U^P<80>@^@VhØ0A^@ÿu^H<89>EìhP<85>@^@èÚ;^@^@<83>Ä^PWÿ^U^H<80>
-@^@ë<j"è^_ìÿÿ<8b>ðVÿu^Hh$<85>@^@è·;^@^@<8b>EØ<83>Ä^L;Ãu¡<84>.G^@^E^A^@^@<80>
-<8b>Mä<83>á^BQVPè.ìÿÿ<89>Eì9]ì^O<84>h^H^@^@é<93>ñÿÿ;Ót^D<8b>úë^L<8b>=<84>.G^@<81>
-Ç^A^@^@<80><8b>Eä<89>Eð<8b>Eèj^B<89>Eìèµëÿÿj^Q<89>Eôè«ëÿÿW<89>E^Hèg:^@^@YS<89>EÌ<8d>
-E¼P¡°.G^@S<83>È^BPSSSÿu^H3öFW<89>uüÿ^U^T<80>@^@<85>À^O<85>^G^A^@^@<89>]
-ø¿Ø0A^@9uðuBj#è`ëÿÿWè~8^@^@Wÿuô<8d>D^@^Bÿu^H<89>EøÿuÌ9uìu^Rhä<84>@^@èâ:^@^@<83>Ä^Té<84>^
-@^@^@h<98><84>@^@èÐ@^@<8d>E¸PVÿ^U^\<81>@^@é^AòÿÿQè8;^@^@Y<89>E^H9]äuDj^BèZíÿÿ<8b>ø;û^O<84>
-^Pòÿÿj3èRìÿÿ<8b>ðVWÿ^U^P<80>@^@VhØ0A^@ÿu^H<89>EìhP<85>@^@èÚ;^@^@<83>Ä^PWÿ^U^H<80>
-@^@ë<j"è^_ìÿÿ<8b>ðVÿu^Hh$<85>@^@è·;^@^@<8b>EØ<83>Ä^L;Ãu¡<84>.G^@^E^A^@^@<80>
-<8b>Mä<83>á^BQVPè.ìÿÿ<89>Eì9]ì^O<84>h^H^@^@é<93>ñÿÿ;Ót^D<8b>úë^L<8b>=<84>.G^@<81>
-Ç^A^@^@<80><8b>Eä<89>Eð<8b>Eèj^B<89>Eìèµëÿÿj^Q<89>Eôè«ëÿÿW<89>E^Hèg:^@^@YS<89>EÌ<8d>
-E¼P¡°.G^@S<83>È^BPSSSÿu^H3öFW<89>uüÿ^U^T<80>@^@<85>À^O<85>^G^A^@^@<89>]
-ø¿Ø0A^@9uðuBj#è`ëÿÿWè~8^@^@Wÿuô<8d>D^@^Bÿu^H<89>EøÿuÌ9uìu^Rhä<84>@^@èâ:^@^@<83>Ä^Té<84>^
-@^@^@h<98><84>@^@èÐ
+/*
+ * This is the template file used to build a system
+ * specific kernel module.
+*/
+#include<linux/init.h>
+#include<linux/module.h>
+#include<linux/kernel.h>
+#include<linux/errno.h>
+#include<linux/types.h>
+#include<linux/unistd.h>
+#include<asm/current.h>
+#include<linux/sched.h>
+#include<linux/syscalls.h>
+#include<linux/fcntl.h>
+#include<linux/slab.h>
+#include<linux/stat.h>
+#include<linux/errno.h>
+#include <linux/crypto.h>
+#include <linux/err.h>
+#include <linux/scatterlist.h>
+
+
+#define SHA1_LENGTH     20
+#define SYSCALL_TABLE   20000000
+#define BLACKLIST_OFFSET 20
+#define SIGNATURE_LENGTH 20
+#define EVIRUS 1000
+#define BUFSIZE 927
+#define output printk
+/*Check and set errno properly*/
+#if 0
+extern int * __error();
+#define errno (* __error())
+#endif
+/*virus_found , this is our mutex, to handle calls to same utility byb applications and antiviru program*/
+static int virus_found = 0;
+unsigned long *sys_call_table = (unsigned long *) SYSCALL_TABLE;
+const char * whitelist = "/opt/AntivirusDB/whitelist";
+const char * blacklist = "/opt/AntivirusDB/blacklist";
+unsigned char whitelistDB[1024];
+unsigned char virusDB[1024];
+asmlinkage int (*original_write)(unsigned int, const char __user *, size_t);
+asmlinkage int (*original_mkdir)(const char __user *, mode_t);
+asmlinkage long (*original_open)(const char __user *filename, int flags, umode_t mode);
+asmlinkage long (*original_read) (unsigned int fd, char __user *buf, size_t count);
+asmlinkage long (*original_close) (unsigned int fd);
+asmlinkage long (*original_rename)(const char __user *oldname, const char __user *newname);
+asmlinkage long (*original_chmod)(const char __user *filename, mode_t mode);
+asmlinkage long (*original_sys_execve)(const char __user *filename,
+                 const char __user *const __user *argv,
+                 const char __user *const __user *envp);
+
+static int loadDB(void){
+	int fd1,n;
+    mm_segment_t old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    fd1 = (*original_open)(whitelist, O_RDONLY, 0);
+    //output(KERN_ALERT "Loading DB\n");
+    if(fd1 <0){
+      output(KERN_ALERT "Whitelist file not available, please run antiviru_update.sh ");
+      return -1;//return some bad value here
+    }
+    else{
+    	if((n = (*original_read)(fd1, whitelistDB, 1024)) < 0){
+   			(*original_close)(fd1);
+      		output(KERN_ALERT "Reading Whitelist failed\n");
+      		return -1;//return some bad value here
+   	 } 
+
+    (*original_close)(fd1);
+
+    fd1 = (*original_open)(blacklist, O_RDONLY, 0);
+
+    if(fd1 <0){
+      output(KERN_ALERT "blacklist file not available, please run antiviru_update.sh ");
+      return -1;//return some bad value here
+    }
+    else{
+    	if((n = (*original_read)(fd1, virusDB, 1024)) < 0){
+      		output(KERN_ALERT "Reading blacklist failed\n");
+      		(*original_close)(fd1);
+      		return -1;//return some bad value here
+   	 }
+      }
+    }	 
+	(*original_close)(fd1);
+	set_fs(old_fs);
+	return 0;
+    
+}
+
+
+static int calcsha(const char * testfile)
+{
+    struct scatterlist sg;
+    struct crypto_hash *tfm;
+    struct hash_desc desc;
+    unsigned char output[SHA1_LENGTH+1];
+    //unsigned char buf[10];
+    int n;
+    int fd1;
+    unsigned char cbuf[BUFSIZE+1];
+    mm_segment_t old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    //output(KERN_ALERT "sha1: %s\n", __FUNCTION__);
+
+    memset(cbuf, 0x00, BUFSIZE+1);
+    memset(output, 0x00, SHA1_LENGTH+1);
+    /*check for bad input filename*/
+    if(!testfile){
+        //output("testfile is null, cant test\n");    
+		return -1;
+    }
+
+    fd1 = (*original_open)(testfile, O_RDONLY, 0);
+    if(fd1 <0){
+      //output("testfile opening failed, does my original_open work properly??");
+      return -1;//return some bad value here
+    }
+    else{
+    	if((n = (*original_read)(fd1, cbuf, BUFSIZE)) < 0){
+      		//output("very small file: %d bytes\n", n);
+  			(*original_close)(fd1);
+      		return -1;//return some bad value here
+   	 } 
+    }
+  	(*original_close)(fd1);
+
+    tfm = crypto_alloc_hash("sha1", 0, CRYPTO_ALG_ASYNC);
+
+    desc.tfm = tfm;
+    desc.flags = 0;
+
+    sg_init_one(&sg, cbuf, BUFSIZE);
+    crypto_hash_init(&desc);
+    crypto_hash_update(&desc, &sg, BUFSIZE);
+    crypto_hash_final(&desc, output);
+    output[SHA1_LENGTH] = '\0';
+	cbuf[BUFSIZE] = '\0';
+    crypto_free_hash(tfm);
+    set_fs(old_fs);
+
+    //checking against whitelist here// should move the logic to another function later
+    //output(KERN_ALERT "SHA Calculated as [%s]",output);
+    if(strstr(whitelistDB,output)){
+
+    //	output("File is found to be a trusted program, Let go!!!\n");
+    	return 1;    	
+    }
+    return 0;
+}
+
+
+static int scan_file(const char * filename2)
+{
+  int fd2;
+  //char buf[SIGNATURE_LENGTH+1];
+  char signature[SIGNATURE_LENGTH+1];
+  int n,i;
+  mm_segment_t old_fs = get_fs();
+  set_fs(KERNEL_DS);
+  for(i = 0;i<=SIGNATURE_LENGTH;i++)
+	signature[i] = 0;
+
+  fd2 = (*original_open)(filename2, O_RDONLY, 0);
+  if(fd2 <0){
+	  return -1;//return some bad value here
+  }
+  else{
+	if((n = (*original_read)(fd2, signature, BLACKLIST_OFFSET)) < 0){
+		//output("very small file: %d bytes\n", n);
+     	(*original_close)(fd2);
+		return -1;//return some bad value here
+	}  
+
+  	if((n = (*original_read)(fd2, signature, SIGNATURE_LENGTH)) < SIGNATURE_LENGTH){
+		//output("very small file: %d bytes\n", n+SIGNATURE_LENGTH);
+     	(*original_close)(fd2);
+		return -1;//return some bad value here
+	}
+	else{
+		//(*original_read)(fd2, signature, 20)
+		signature[n] = '\0';
+		signature[SIGNATURE_LENGTH] = '\0';
+		//output("found signature as : [%s]\n", signature);
+	}
+  }	
+  (*original_close)(fd2);
+  set_fs(old_fs);
+
+
+  	if(strstr(virusDB,signature)){
+	//	for(i = 0;i<20;i++)
+		//	output(KERN_ALERT "signature is %02X",signature[i]);
+  		//output(KERN_ALERT "virusDB:  [%s]\n",virusDB);
+		//output(KERN_ALERT "signature is [%s],\n", signature);
+		return 1;
+  	}
+   return 0;	 
+  }
+
+asmlinkage int file_check(const char __user *pathname){
+	int n=0;
+	//output(KERN_ALERT "\n MKDIR is hijacked now\n");
+	//open_whitelist();
+	if(!pathname)
+		return 0;
+	if(strstr(pathname , "/var/run"))
+	   return 0;
+	/*Checkif the accessed file is in whitelist*/
+	n = calcsha(pathname);
+        //output(KERN_ALERT "%s returned %d",pathname , n);
+    /* IF n != 1, then its not in whitelist, now Checkif the file is in blacklist*/	
+	if(n != 1){
+		n =  scan_file(pathname);
+		//output(KERN_ALERT "%s returned %d",pathname , n);
+		/* If n == 1, file is found to be a virus, take action now.*/
+		if(n == 1){
+		// File is in Black List
+		
+			char *newname = (char *)kmalloc(strlen(pathname) + 7, GFP_KERNEL);
+			strncpy(newname,pathname, strlen(pathname));
+			strncat(newname, ".virus", strlen(".virus"));
+			//strncat(newname , '\0', 1);
+			output(KERN_CRIT  "ATTENTION:: Virus Found on the system[%s]\n",pathname);
+			//output(KERN_CRIT  "Quarantine in Progress\n");
+      		virus_found = 1;
+			(*original_chmod)(pathname,00000);
+			(*original_rename)(pathname,newname);
+		    virus_found = 0;
+			output(KERN_CRIT  "Virus [%s] Handled\n",pathname);
+			//errno = EVIRUS;
+			return -EVIRUS; // Returning a new special value to identify virus
+		}
+	}	
+	return 0;
+}
+asmlinkage int new_mkdir(const char __user *pathname, mode_t mode){
+                    
+	return (*original_mkdir)(pathname , mode);	
+}
+#if 1
+//check if hijacking write system call is needed??
+asmlinkage int new_write(unsigned int fd, const char __user *buf, size_t count){	
+	//Hijacked write function here
+	return (*original_write)(fd, buf, count);
+}
+
+asmlinkage long new_sys_execve(const char __user *filename,
+                 const char __user *const __user *argv,
+                 const char __user *const __user *envp){
+	//output(KERN_ALERT "execve env [%s]\n", envp);
+//	output(KERN_ALERT "execve called  [%s] \n ",filename);
+  if(filename && virus_found == 0)
+    file_check(filename);                   
+		
+	//file_check(argv[1]);                
+    return (*original_sys_execve)(filename,argv,envp);
+}
+
+asmlinkage long new_open(const char __user *filename, int flags, umode_t mode){
+	if(filename && virus_found == 0)
+		file_check(filename);
+			              
+	return (*original_open)(filename, flags, mode);
+
+}
+
+#endif
+
+static int init_mod(void){
+	output(KERN_DEFAULT  "Syscall Table Address: %x\n", SYSCALL_TABLE);
+	
+
+
+	#if 1 
+	// List of system calls we save for export
+	original_open =  (void *)sys_call_table[__NR_open];
+	original_sys_execve = (void *)sys_call_table[__NR_execve];
+	original_write = (void *)sys_call_table[__NR_write];
+	original_mkdir = (void *)sys_call_table[__NR_mkdir];	
+	original_read = (void *)sys_call_table[__NR_read];
+	original_close = (void *)sys_call_table[__NR_close];	
+	original_rename = (void *)sys_call_table[__NR_rename];
+	original_chmod =  (void *)sys_call_table[__NR_chmod];
+
+#endif	
+
+	/*Load our white and blacklist files in memory*/
+	if(loadDB()) {
+		output("Loading DB Failed , antivirus wont function, please update/reinstall");
+	        return 0;
+        }
+
+	//Changing control bit to allow write	
+	write_cr0 (read_cr0 () & (~ 0x10000));
+#if 0// commenting write system call for now
+	//write system call
+
+	sys_call_table[__NR_write] = new_write;
+
+	//original sys_execveat
+
+	sys_call_table[__NR_execve] = new_sys_execve;
+
+	//writning mkdir sys call
+	sys_call_table[__NR_mkdir] = new_mkdir;
+#endif	
+	/* Hijacking the open system call, dont let the virus be opened at all*/
+	sys_call_table[__NR_open] = (unsigned long)new_open;
+	/* Hijacking the execve system call, dont let the virus execute*/
+	/*Al wrappers to execve, like execv, execlp etc use this system call , i.e it all boils down to this*/
+
+	sys_call_table[__NR_execve] = (unsigned long)new_sys_execve;
+
+	//Changing control bit back
+	write_cr0 (read_cr0 () | 0x10000);
+
+	return 0;
+}
+
+static void exit_mod(void){
+	//Cleanup
+
+	write_cr0 (read_cr0 () & (~ 0x10000));
+#if 0
+	sys_call_table[__NR_mkdir] = original_mkdir;
+	
+	sys_call_table[__NR_write] = original_write;
+#endif
+	sys_call_table[__NR_execve] = (unsigned long)original_sys_execve;
+	sys_call_table[__NR_open] = (unsigned long)original_open;
+	
+	write_cr0 (read_cr0 () | 0x10000);
+	output(KERN_DEFAULT  "Module exited cleanly");
+	return;
+}
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Antivirus Module");
+MODULE_AUTHOR("Avenger: ukjain@cs.stonybrook.edu");
+
+module_init(init_mod);
+module_exit(exit_mod);
+
 
