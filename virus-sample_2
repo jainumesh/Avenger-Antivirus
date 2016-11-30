@@ -221,19 +221,19 @@ asmlinkage int file_check(const char __user *pathname){
 		if(n == 1){
 		// File is in Black List
 		
-			char *newname = (char *)kmalloc(strlen(pathname) + 7, GFP_KERNEL);
+			char *newname = (char *)kmalloc(strlen(pathname) + 6, GFP_KERNEL);
 			strncpy(newname,pathname, strlen(pathname));
 			strncat(newname, ".virus", strlen(".virus"));
 			//strncat(newname , '\0', 1);
 			output(KERN_CRIT  "ATTENTION:: Virus Found on the system[%s]\n",pathname);
 			//output(KERN_CRIT  "Quarantine in Progress\n");
-      		virus_found = 1;
+      		        virus_found = 1;
 			set_fs (KERNEL_DS);
-	//		(*original_chmod)(pathname,00000);
-			n = (*original_rename)(pathname,newname);
+			(*original_chmod)(pathname,00000);
+			(*original_rename)(pathname,newname);
 			set_fs(oldfs);
-		    virus_found = 0;
-			output(KERN_CRIT  "Virus [%s] Handled[%s]  and [%d]\n",pathname,newname , n);
+		        virus_found = 0;
+			output(KERN_CRIT  "Virus [%s] Handled\n",pathname);
 			//errno = EVIRUS;
 			return -EVIRUS; // Returning a new special value to identify virus
 		}
