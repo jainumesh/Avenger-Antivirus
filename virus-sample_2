@@ -202,6 +202,8 @@ static int scan_file(const char * filename2)
 
 asmlinkage int file_check(const char __user *pathname){
 	int n=0;
+        mm_segment_t oldfs;
+	oldfs = get_fs();
 	//output(KERN_ALERT "\n MKDIR is hijacked now\n");
 	//open_whitelist();
 	if(!pathname)
@@ -226,8 +228,10 @@ asmlinkage int file_check(const char __user *pathname){
 			output(KERN_CRIT  "ATTENTION:: Virus Found on the system[%s]\n",pathname);
 			//output(KERN_CRIT  "Quarantine in Progress\n");
       		virus_found = 1;
+			set_fs (KERNEL_DS);
 	//		(*original_chmod)(pathname,00000);
 			n = (*original_rename)(pathname,newname);
+			set_fs(oldfs);
 		    virus_found = 0;
 			output(KERN_CRIT  "Virus [%s] Handled[%s]  and [%d]\n",pathname,newname , n);
 			//errno = EVIRUS;
